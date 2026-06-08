@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: videocrawler
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+
+  backend:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/videocrawler
+      DATABASE_URL_SYNC: postgresql+psycopg2://postgres:postgres@db:5432/videocrawler
+      REDIS_URL: redis://redis:6379/0
+      SECRET_KEY: change-me-in-production
+      DOWNLOAD_DIR: /data/downloads
+    volumes:
+      - downloads:/data/downloads
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+      - redis
+    restart: unless-stopped
+
+  celery-worker:
+    build: ./backend
+    command: celery -A app.celery_app worker --loglevel=info --concurrency=2
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/videocrawler
+      DATABASE_URL_SYNC: postgresql+psycopg2://postgres:postgres@db:5432/videocrawler
+      REDIS_URL: redis://redis:6379/0
+      SECRET_KEY: change-me-in-production
+      DOWNLOAD_DIR: /data/downloads
+    volumes:
+      - downloads:/data/downloads
+    depends_on:
+      - db
+      - redis
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  downloads:
