@@ -2,10 +2,20 @@ import axios from 'axios'
 import { ElMessage } from 'element-plus'
 import router from '../router'
 
+// Backend base URL: set VITE_API_BASE_URL at build time for production (e.g. Render),
+// falls back to same-origin '/api' for local dev (Vite proxy).
+export const API_BASE = import.meta.env.VITE_API_BASE_URL || ''
+
 const api = axios.create({
-  baseURL: '/api',
+  baseURL: API_BASE + '/api',
   timeout: 30000,
 })
+
+// Absolute URL for file downloads (browser <a> tag cannot use relative API path
+// when frontend and backend are on different origins)
+export function fileUrl(path) {
+  return API_BASE + path
+}
 
 // Request interceptor: attach JWT token
 api.interceptors.request.use(

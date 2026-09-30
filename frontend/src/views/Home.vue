@@ -77,6 +77,7 @@ import { VideoCameraFilled, Link, Search, Clock, Setting, ArrowDown } from '@ele
 import { useRouter } from 'vue-router'
 import { useUserStore } from '../store/user'
 import { parseVideo, downloadVideo, getTaskStatus } from '../api/video'
+import { fileUrl } from '../api'
 import VideoCard from '../components/VideoCard.vue'
 import DownloadProgress from '../components/DownloadProgress.vue'
 
@@ -132,7 +133,7 @@ async function handleDownload() {
           ElMessage.success(`${videoInfo.value.title} 下载完成！`)
 
           const a = document.createElement('a')
-          a.href = `/api/video/task/${res.data.id}/file`
+          a.href = fileUrl(`/api/video/task/${res.data.id}/file`)
           a.download = `${videoInfo.value.title}.mp4`
           a.click()
         } else if (statusRes.data.status === 'failed') {

@@ -51,7 +51,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { ArrowLeft } from '@element-plus/icons-vue'
-import api from '../api/index'
+import api, { fileUrl } from '../api/index'
 
 const history = ref([])
 const loading = ref(false)
@@ -70,7 +70,7 @@ async function fetchHistory() {
 
 function downloadFile(row) {
   const a = document.createElement('a')
-  a.href = `/api/video/task/${row.id}/file`
+  a.href = fileUrl(`/api/video/task/${row.id}/file`)
   a.download = `${row.video_title || 'video'}.mp4`
   a.click()
 }
