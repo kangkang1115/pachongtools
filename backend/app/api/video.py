@@ -1,11 +1,13 @@
-import uuid
+import os
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..database import get_db
+from ..database import get_db, gen_uuid
+from ..config import settings
 from ..models.user import User
 from ..models.task import DownloadTask
 from ..schemas.video import ParseRequest, ParseResponse, DownloadRequest, TaskResponse
@@ -50,59 +52,91 @@ async def submit_download(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Submit a video download task."""
+    """Parse + Download video directly (synchronous)."""
     url = req.url.strip()
 
     # Determine platform
     if "douyin.com" in url:
         platform = "douyin"
+        from ..services.parser_douyin import parse_douyin_video
     elif "bilibili.com" in url or "b23.tv" in url:
         platform = "bilibili"
+        from ..services.parser_bilibili import parse_bilibili_video
     else:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="不支持的平台链接",
         )
 
-    # Parse to get video info
-    try:
-        if platform == "douyin":
-            from ..services.parser_douyin import parse_douyin_video
-            info = await parse_douyin_video(url)
-        else:
-            from ..services.parser_bilibili import parse_bilibili_video
-            info = await parse_bilibili_video(url)
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"视频解析失败: {str(e)}",
-        )
-
     # Create task record
     task = DownloadTask(
-        id=uuid.uuid4(),
+        id=gen_uuid(),
         user_id=current_user.id,
         platform=platform,
         source_url=url,
-        video_title=info.title,
-        video_author=info.author,
-        video_cover=info.cover_url,
-        video_duration=info.duration,
-        status="pending",
+        status="parsing",
     )
     db.add(task)
     await db.commit()
+
+    try:
+        # Parse video info
+        if platform == "douyin":
+            info = await parse_douyin_video(url)
+        else:
+            info = await parse_bilibili_video(url)
+
+        task.video_title = info.title
+        task.video_author = info.author
+        task.video_cover = info.cover_url
+        task.video_duration = info.duration
+        task.status = "downloading"
+        await db.commit()
+
+        # Download directly
+        from ..services.downloader import download_video, merge_video_audio
+
+        if info.is_dash and info.audio_url:
+            # B站 DASH
+            video_path = await download_video(
+                info.download_url,
+                filename_prefix=f"bilibili_v_{task.id[:8]}",
+                headers={"Referer": "https://www.bilibili.com/"},
+            )
+            audio_path = await download_video(
+                info.audio_url,
+                filename_prefix=f"bilibili_a_{task.id[:8]}",
+                headers={"Referer": "https://www.bilibili.com/"},
+            )
+            task.status = "processing"
+            await db.commit()
+
+            output_path = os.path.join(settings.DOWNLOAD_DIR, f"{task.id}_merged.mp4")
+            final_path = merge_video_audio(video_path, audio_path, output_path)
+        else:
+            final_path = await download_video(
+                info.download_url,
+                filename_prefix=f"{platform}_{task.id[:8]}",
+            )
+
+        # Mark completed
+        task.status = "completed"
+        task.file_path = final_path
+        task.file_size = os.path.getsize(final_path)
+        task.finished_at = datetime.now(timezone.utc)
+        await db.commit()
+
+    except Exception as e:
+        task.status = "failed"
+        task.error_msg = str(e)[:500]
+        task.finished_at = datetime.now(timezone.utc)
+        await db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"下载失败: {str(e)[:200]}",
+        )
+
     await db.refresh(task)
-
-    # Submit to Celery
-    from ..tasks.download import download_video_task
-    download_video_task.delay(str(task.id), url, platform)
-
-    # Update status
-    task.status = "parsing"
-    await db.commit()
-    await db.refresh(task)
-
     return TaskResponse(
         id=str(task.id),
         platform=task.platform,
@@ -130,12 +164,8 @@ async def get_task_status(
         )
     )
     task = result.scalar_one_or_none()
-
     if not task:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="任务不存在",
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="任务不存在")
 
     return TaskResponse(
         id=str(task.id),
@@ -153,14 +183,12 @@ async def get_task_status(
 @router.get("/task/{task_id}/file")
 async def download_task_file(
     task_id: str,
-    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Download the completed video file."""
+    """Download the completed video file. No auth required — task ID acts as secret."""
     result = await db.execute(
         select(DownloadTask).where(
             DownloadTask.id == task_id,
-            DownloadTask.user_id == current_user.id,
             DownloadTask.status == "completed",
         )
     )

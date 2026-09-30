@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..database import get_db
+from ..database import get_db, gen_uuid
 from ..models.user import User
 from ..schemas.auth import LoginRequest, RegisterRequest, TokenResponse
 from ..utils.security import hash_password, verify_password, create_access_token
@@ -49,7 +49,7 @@ async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
         )
 
     user = User(
-        id=uuid.uuid4(),
+        id=gen_uuid(),
         username=req.username,
         password_hash=hash_password(req.password),
         role="member",

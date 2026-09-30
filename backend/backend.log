@@ -1,0 +1,15 @@
+INFO:     Will watch for changes in these directories: ['D:\\liyik\\×ÀÃæ\\pachongtools\\backend']
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:     Started reloader process [26372] using WatchFiles
+INFO:     Started server process [5076]
+INFO:     Waiting for application startup.
+2026-06-08 15:31:21,417 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-06-08 15:31:21,417 INFO sqlalchemy.engine.Engine PRAGMA main.table_info("users")
+2026-06-08 15:31:21,417 INFO sqlalchemy.engine.Engine [raw sql] ()
+2026-06-08 15:31:21,419 INFO sqlalchemy.engine.Engine PRAGMA main.table_info("download_tasks")
+2026-06-08 15:31:21,419 INFO sqlalchemy.engine.Engine [raw sql] ()
+2026-06-08 15:31:21,420 INFO sqlalchemy.engine.Engine COMMIT
+INFO:     Application startup complete.
+INFO:     127.0.0.1:59918 - "GET /docs HTTP/1.1" 200 OK
+WARNING:  WatchFiles detected changes in 'server.py'. Reloading...
+INFO:     127.0.0.1:60909 - "GET /docs HTTP/1.1" 200 OK
