@@ -10,6 +10,17 @@ venv/
 node_modules/
 dist/
 
+# Logs & database
+*.log
+*.db
+*.sqlite3
+
+# Local machine files
+test_share.html
+ecosystem.config.js
+start-services.bat
+backend/server.py
+
 # IDE
 .vscode/
 .idea/
